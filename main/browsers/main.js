@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron/main';
 import path from 'node:path'
+
 const createWin = (winName) => {
   const win = new BrowserWindow({
     width: 800,

@@ -7,17 +7,30 @@
     <script src="./main_render.js" type="module"></script>
   </head>
   <body style="background: transparent; -webkit-app-region: drag">
-    <h1>Hello World!</h1>
-    We are using Node.js <span id="node-version"></span>,
-    Chromium <span id="chrome-version"></span>,
-    and Electron <span id="electron-version"></span>.
+    <h1>main!</h1>
 
+    <h3>主窗口/当前窗口</h2>
     <div>
-      <button id="main_process">main process</button>
-      <button id="second_win">second win</button>
-      <button id="current">current</button>
-      <button id="main_win">main win</button>
-      <button id="all">all</button>
+      <button id="main_windows_">$:test</button>
+      <button id="main_windows">mainWindow:test</button>
+      <button id="current_">:test</button>
+      <button id="current">current:test</button>
+    </div>
+
+    <h3>主进程</h2>
+    <div>  
+      <button id="main_">#:test</button>
+      <button id="main">main:test</button>
+    </div>
+    
+    <h3>子窗口</h3>
+    <div>
+      <button id="second_window">secondWindow:test</button>
+    </div>
+
+    <h3>all</h3>
+    <div> 
+      <button id="all">test</button>
     </div>
   </body>
 </html>

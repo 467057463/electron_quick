@@ -7,11 +7,11 @@ const aliasCourseReg = /^(?<course>[#$@]):(?<name>[a-zA-Z\d]+)$/;
 const currentCourseReg = /^:(?<name>[a-zA-Z\d]+)$/;
 const allCourseReg = /^(?<name>[a-zA-Z\d]+)$/;
 
-console.log(once, getEventListeners)
+// console.log(once, getEventListeners)
 
 const courseAlias = {
   "$": 'mainWindow',
-  "@": 'all',
+  // "@": 'all',
   "#": 'main'
 }
 
@@ -47,6 +47,47 @@ function generateCourse(eventName){
 class Events{
   #instance = new EventEmitter();
 
+  #initEventPipe(){
+    if(process.type === 'renderer'){
+      ipcRenderer.on("__eventPipe", (e, {eventName, args}) => {
+        this.#instance.emit(eventName, args)
+      })
+    } else if( process.type === 'browser'){
+      ipcMain.on('__eventPipe', (e, { eventName, type, args, ...data }) => {
+        switch(type){
+          // 直发发主进程
+          case 'direct':
+            this.#instance.emit(eventName, args);
+            break;
+          // 转发
+          case 'transpond':
+            const wins = getWin(data.winName);
+            wins.forEach((win) => this.#emitToRender(win, { eventName, args}))
+            break;
+          // 广播
+          case 'broadcast':
+            // 主进程
+            this.#instance.emit(eventName, args);
+            // 除发送的进程以外的所有进程
+            BrowserWindow.getAllWindows().forEach((win) => {
+              if(win.webContents.id !== e.sender.id){
+                this.#emitToRender(win, { eventName, args })
+              }
+            })
+            break;
+        }
+      })
+    }
+  }
+
+  #emitToMain(params){
+    ipcRenderer.send('__eventPipe', params)
+  }
+
+  #emitToRender(win, params){
+    win.webContents.send('__eventPipe', params)
+  }
+
   constructor(){
     this.#initEventPipe();
     if(process.type === 'renderer'){
@@ -56,99 +97,69 @@ class Events{
     }
   }
 
-  #initEventPipe(){
-    if(process.type === 'renderer'){
-      ipcRenderer.on("__eventPipe", (e, {eventName, emiter, args}) => {
-        this.#instance.emit(eventName, emiter, args)
-      })
-    } else if( process.type === 'browser'){
-      ipcMain.on('__eventPipe', (e, { eventName, transpond, broadcast, winName, args }) => {
-        const emiter = getWinName(BrowserWindow.fromWebContents(e.sender));
-        console.log(e, { eventName, transpond, broadcast, winName, emiter, args })
-        if(transpond){
-          const wins = getWin(winName);
-          wins.forEach((win) => this.#emitToRender(win, { eventName, emiter, args}))
-        } else if(broadcast) {
-          this.#instance.emit(eventName, emiter, args)
-          BrowserWindow.getAllWindows().forEach((win) => {
-            if(win.id !== e.sender.id){
-              this.#emitToRender(win, { eventName, emiter, args })
-            }
-          })
-        } else {
-          this.#instance.emit(eventName, emiter, args)
-        }
-      })
-    }
-  }
-
-  #emitToMain({eventName, ...rest}){
-    ipcRenderer.send('__eventPipe', {
-      eventName,
-      ...rest
-    })
-  }
-
-  #emitToRender(win, {eventName, ...rest}){
-    win.webContents.send('__eventPipe', {
-      eventName, ...rest
-    })
-  }
-
   on(eventName, callback){
     const currentProcess = getCurrentWinName();
     const { course, name } = generateCourse(eventName);
-    const _eventName = course === 'all' ? `${course}_${name}` : name;
-    const cb = (emiter, ...args) => {
-      console.log(currentProcess, emiter, course, args);
-      if(course === 'all'){
-        callback(...args);
-      } else if(emiter === course) {
-        callback(...args);
-      } else if(currentProcess === emiter && course === 'current'){
-        callback(...args);
-      }
-    }
-    cb.__course = course
-    this.#instance.on(_eventName, cb);
+    const _eventName = course === 'current' 
+      ? `${currentProcess}_${name}` 
+      : `${course}_${name}`;
+    this.#instance.on(_eventName, callback);
   }
 
   emit(eventName, args){
-    const { course, name } = generateCourse(eventName);
-    const emiter = getCurrentWinName();
+    let { course, name } = generateCourse(eventName);
+    const currentProcess = getCurrentWinName();
+    if(course === currentProcess){
+      course = 'current'
+    }
+
+    const _eventName = course === 'all' 
+      ? `${course}_${name}`
+      : `${currentProcess}_${name}`;
+
     switch(course){
       case 'main':
         if(process.type === 'renderer'){
-          this.#emitToMain({ eventName: `${name}`, emiter, args })
+          this.#emitToMain({ 
+            eventName: _eventName, 
+            type: 'direct',
+            args 
+          })
         }
         break;
       case 'all':
         if(process.type === 'renderer'){
-          this.#instance.emit(`${course}_${name}`, emiter, args);
+          // 触发当前窗口
+          this.#instance.emit(_eventName, args);
+          // 触发到主进程并广播到其他窗口
           this.#emitToMain({ 
-            eventName: `${course}_${name}`, 
-            broadcast: true,
-            emiter,
+            eventName: _eventName, 
+            type: 'broadcast',
             args
+          })
+        } else {
+          // 主进程的
+          this.#instance.emit(_eventName, args);
+          // 所有窗口
+          BrowserWindow.getAllWindows().forEach((win) => {
+            this.#emitToRender(win, { eventName: _eventName, args })
           })
         }
         break;
       case 'current':
-        this.#instance.emit(`${name}`, emiter, args);
+        this.#instance.emit(`${currentProcess}_${name}`, args);
         break;
       default:
         if(process.type === 'renderer'){
-          if(course === emiter){
-            this.#instance.emit(`${name}`, emiter, args);
-          } else {
-            this.#emitToMain({ 
-              eventName: `${name}`, 
-              transpond: true,
-              winName: course,
-              args,
-              course,
-            })
-          }
+          this.#emitToMain({ 
+            eventName: _eventName, 
+            type: 'transpond',
+            winName: course,
+            args,
+          })
+        } else {
+          const wins = getWin(course)
+          wins.forEach((win) => this.#emitToRender(win, { eventName: _eventName, args}));
         }
         break
     }
@@ -198,15 +209,8 @@ function getWin(name){
   }
 }
 
-function getWinName(win){
-  for(const [name, browserSet] of Array.from(browserMap.entries())){
-    if(browserSet.has(win)){
-      return name;
-    }
-  }
-}
 
-function getCurrentWinName(){
+export function getCurrentWinName(){
   if(process.type === 'browser'){
     return 'main'
   } else {

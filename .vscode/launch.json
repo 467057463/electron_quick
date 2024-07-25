@@ -8,6 +8,11 @@
       "name": "Main + renderer",
       "configurations": ["Debug Main Process", "Debug Renderer Process"],
       "stopAll": true,
+      "presentation": {
+        "hidden": false,
+        "group": "",
+        "order": 1
+      }
     }
   ],
   "configurations": [
@@ -21,6 +26,7 @@
         "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron.cmd"
       },
       "args" : [".",  "--remote-debugging-port=9222"],
+      "stopOnEntry": true,
       "outputCapture": "std",
       "console": "integratedTerminal"
     },
